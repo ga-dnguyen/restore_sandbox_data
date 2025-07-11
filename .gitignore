@@ -1,0 +1,5 @@
+# Ignore the .env file
+.env
+exported_data
+exported_metadata
+venv
