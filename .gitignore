@@ -3,3 +3,5 @@
 exported_data
 exported_metadata
 venv
+.sfdx
+.DS_Store

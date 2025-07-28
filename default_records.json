@@ -1,0 +1,23 @@
+{
+    "Lead": {
+        "LastName": "Lead Default"
+    },
+    "Account": {
+        "LastName": "Account Default",
+        "RecordTypeId": "0122v000001bxFGAAY"
+    },
+    "Apart__c": {
+        "Name": "Apart Default"
+    },
+    "Buyer__c": {
+        "Name": "Buyer Default"
+    },
+    "Opportunity": {
+        "Name": "Opportunity Default",
+        "StageName": "チャンス",
+        "CloseDate": "2025-07-28"
+    },
+    "Room__c": {
+        "Name": "101"
+    }
+}

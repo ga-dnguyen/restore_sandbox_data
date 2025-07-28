@@ -8,7 +8,7 @@ def main():
     Connects to Salesforce, queries specified objects, and saves the data to CSV files.
     """
     # Load environment variables from .env file
-    load_dotenv()
+    load_dotenv(override=True)
 
     # Salesforce OAuth credentials
     sf_username = os.getenv("SALESFORCE_USERNAME")
