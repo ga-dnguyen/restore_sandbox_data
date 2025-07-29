@@ -46,6 +46,71 @@ def get_readonly_fields(sf, object_name):
         print(f"Could not describe object {object_name}: {e}")
         return set()
 
+def get_available_fields(sf, object_name):
+    """Gets a set of all available fields for an object in the current org."""
+    try:
+        sobject_desc = getattr(sf, object_name).describe()
+        return {field['name'] for field in sobject_desc['fields']}
+    except Exception as e:
+        print(f"Could not describe object {object_name}: {e}")
+        return set()
+
+def clean_lookup_references(sf, obj_name, insert_df, lookup_mappings):
+    """Remove lookup field values that reference non-existent records."""
+    if obj_name not in lookup_mappings:
+        return insert_df
+    
+    modified_df = insert_df.copy()
+    object_lookup_fields = lookup_mappings[obj_name]
+    
+    for field_name, field_info in object_lookup_fields.items():
+        if field_name not in modified_df.columns:
+            continue
+            
+        # Skip non-createable fields
+        if not field_info.get('createable', False):
+            continue
+        
+        # Get all non-null values for this field
+        non_null_mask = modified_df[field_name].notna() & (modified_df[field_name] != '') & (modified_df[field_name] != ' ')
+        if not non_null_mask.any():
+            continue
+            
+        unique_ids = modified_df.loc[non_null_mask, field_name].unique()
+        referenced_objects = field_info.get('referenceTo', [])
+        
+        # Check if referenced records exist for each referenced object type
+        for ref_object in referenced_objects:
+            try:
+                # Try to query a few of the referenced IDs to see if they exist
+                test_ids = list(unique_ids[:5])  # Test first 5 IDs
+                id_list = "','".join(test_ids)
+                query = f"SELECT Id FROM {ref_object} WHERE Id IN ('{id_list}')"
+                results = sf.query(query)
+                
+                existing_ids = {record['Id'] for record in results['records']}
+                missing_count = len([id for id in test_ids if id not in existing_ids])
+                
+                if missing_count > 0:
+                    print(f"  Warning: {missing_count}/{len(test_ids)} sampled {field_name} references to {ref_object} don't exist")
+                    if missing_count == len(test_ids):
+                        # If all sampled IDs are missing, clear the entire field
+                        print(f"    Clearing all {field_name} values (all sampled references missing)")
+                        modified_df[field_name] = None
+                    else:
+                        # If only some are missing, we could try to validate each one, but that's expensive
+                        # For now, just warn and let Salesforce handle the validation
+                        print(f"    Keeping {field_name} values (some references exist)")
+                
+            except Exception as e:
+                print(f"  Could not validate {field_name} references to {ref_object}: {e}")
+                # If we can't validate, clear the field to be safe
+                print(f"    Clearing {field_name} values due to validation error")
+                modified_df[field_name] = None
+                break
+    
+    return modified_df
+
 def load_default_records():
     """Load default records from default_records.json file."""
     try:
@@ -208,8 +273,21 @@ def main():
 
         # Clean data for insertion
         readonly_fields = get_readonly_fields(sf, obj_name)
-        # Also remove the original Id field itself
-        fields_to_drop = list(readonly_fields.intersection(df.columns)) + ['Id']
+        available_fields = get_available_fields(sf, obj_name)
+        
+        # Find fields in CSV that don't exist in current org
+        csv_fields = set(df.columns)
+        missing_fields = csv_fields - available_fields
+        
+        if missing_fields:
+            print(f"  Warning: {len(missing_fields)} fields in CSV not found in current {obj_name} object:")
+            for field in sorted(list(missing_fields)[:10]):  # Show first 10 to avoid spam
+                print(f"    {field}")
+            if len(missing_fields) > 10:
+                print(f"    ... and {len(missing_fields) - 10} more fields")
+        
+        # Also remove the original Id field itself and any missing fields
+        fields_to_drop = list(readonly_fields.intersection(df.columns)) + ['Id'] + list(missing_fields)
         insert_df = df.drop(columns=fields_to_drop, errors='ignore')
 
         # Replace foreign keys with new IDs from the map
@@ -222,6 +300,11 @@ def main():
         if default_record_ids and lookup_mappings:
             print(f"  Checking lookup fields for default record replacement...")
             insert_df = replace_lookup_fields_with_defaults(sf, obj_name, insert_df, default_record_ids, lookup_mappings)
+
+        # Clean lookup field references that point to non-existent records
+        if lookup_mappings:
+            print(f"  Validating lookup field references...")
+            insert_df = clean_lookup_references(sf, obj_name, insert_df, lookup_mappings)
 
         # Convert DataFrame to a list of dictionaries
         records_to_insert = insert_df.to_dict('records')
