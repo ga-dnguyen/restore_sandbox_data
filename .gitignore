@@ -1,4 +1,5 @@
 # Ignore the .env file
+__pycache__/
 .env
 exported_data
 exported_metadata
