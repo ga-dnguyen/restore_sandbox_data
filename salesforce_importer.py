@@ -255,24 +255,86 @@ def main():
             cleaned_records.append(cleaned_record)
         records_to_insert = cleaned_records
 
-        # Insert records one by one using the standard REST API
+        # Insert records using bulk API for better performance
         try:
-            print(f"  Starting insert for {len(records_to_insert)} records...")
-            new_ids = []
-            successful_inserts = 0
-            for record in records_to_insert:
-                try:
-                    # Use sf.restful to pass the duplicate rule header with each request
-                    headers = {'Sforce-Duplicate-Rule-Header': 'allowSave=true'}
-                    result = sf.restful(f'sobjects/{obj_name}/', method='POST', json=record, headers=headers)
-                    if result.get('success'):
+            print(f"  Starting bulk insert for {len(records_to_insert)} records...")
+            
+            if len(records_to_insert) == 0:
+                print(f"  No records to insert for {obj_name}.")
+                continue
+            
+            # Use bulk API for better performance
+            try:
+                # Use the bulk upsert method which is more reliable
+                bulk_results = sf.bulk.__getattr__(obj_name).insert(records_to_insert)
+                
+                successful_inserts = 0
+                new_ids = []
+                failed_records = []
+                
+                # Process bulk results
+                for i, result in enumerate(bulk_results):
+                    if result.get('success') == True or result.get('success') == 'true':
                         new_ids.append(result.get('id'))
-                        # Append None to keep lists aligned for zipping
+                        successful_inserts += 1
+                    else:
                         new_ids.append(None)
-                        print(f"    Successfully inserted record: {result.get('id')}")
-                except Exception as record_error:
-                    new_ids.append(None)
-                    print(f"    An exception occurred while inserting a record: {record_error}")
+                        # Collect detailed error information
+                        error_info = {
+                            'record_index': i + 1,
+                            'record_data': records_to_insert[i] if i < len(records_to_insert) else {},
+                            'errors': []
+                        }
+                        
+                        # Extract error details from different possible formats
+                        if 'error' in result:
+                            error_info['errors'].append(result['error'])
+                        
+                        if 'errors' in result:
+                            if isinstance(result['errors'], list):
+                                for error in result['errors']:
+                                    if isinstance(error, dict):
+                                        error_msg = error.get('message', str(error))
+                                        error_code = error.get('statusCode', '')
+                                        error_fields = error.get('fields', [])
+                                        full_error = f"{error_code}: {error_msg}"
+                                        if error_fields:
+                                            full_error += f" (Fields: {', '.join(error_fields)})"
+                                        error_info['errors'].append(full_error)
+                                    else:
+                                        error_info['errors'].append(str(error))
+                            else:
+                                error_info['errors'].append(str(result['errors']))
+                        
+                        # If no specific errors found, add a generic message
+                        if not error_info['errors']:
+                            error_info['errors'].append(f"Unknown error - Result: {result}")
+                        
+                        failed_records.append(error_info)
+                
+                print(f"    Bulk operation completed: {successful_inserts} successful, {len(bulk_results) - successful_inserts} failed")
+                
+                # Display detailed error information for failed records
+                if failed_records:
+                    print(f"    *** FAILED RECORD DETAILS ***")
+                    for error_info in failed_records[:10]:  # Show first 10 failures to avoid spam
+                        print(f"    Record {error_info['record_index']}:")
+                        for error in error_info['errors']:
+                            print(f"      Error: {error}")
+                        # Show a few key fields from the failed record for context
+                        record_data = error_info['record_data']
+                        key_fields = ['Name', 'LastName', 'FirstName', 'Email', 'Company']
+                        context_fields = {k: v for k, v in record_data.items() if k in key_fields and v}
+                        if context_fields:
+                            print(f"      Record context: {context_fields}")
+                        print()
+                    
+                    if len(failed_records) > 10:
+                        print(f"    ... and {len(failed_records) - 10} more failed records")
+                
+            except Exception as bulk_error:
+                print(f"    Bulk API error: {bulk_error}")
+                raise bulk_error  # Re-raise to trigger fallback
 
             # Filter out None values from new_ids and corresponding original_ids before mapping
             valid_original_ids = [old_id for old_id, new_id in zip(original_ids, new_ids) if new_id is not None]
@@ -285,7 +347,39 @@ def main():
                 print(f"  No records were successfully inserted for {obj_name}.")
 
         except Exception as e:
-            print(f"An error occurred during insert for {obj_name}: {e}")
+            print(f"An error occurred during bulk insert for {obj_name}: {e}")
+            print("Falling back to single record insert...")
+            
+            # Fallback to single record insert if bulk fails
+            new_ids = []
+            successful_inserts = 0
+            for i, record in enumerate(records_to_insert):
+                try:
+                    headers = {'Sforce-Duplicate-Rule-Header': 'allowSave=true'}
+                    result = sf.restful(f'sobjects/{obj_name}/', method='POST', json=record, headers=headers)
+                    if result.get('success'):
+                        new_ids.append(result.get('id'))
+                        successful_inserts += 1
+                        if (i + 1) % 100 == 0:  # Progress indicator every 100 records
+                            print(f"    Processed {i + 1}/{len(records_to_insert)} records...")
+                    else:
+                        new_ids.append(None)
+                        error_details = result.get('errors', [])
+                        if error_details:
+                            print(f"    Record {i+1} failed: {error_details[0].get('message', 'Unknown error')}")
+                except Exception as record_error:
+                    new_ids.append(None)
+                    print(f"    Record {i+1} exception: {record_error}")
+
+            # Filter out None values for fallback method
+            valid_original_ids = [old_id for old_id, new_id in zip(original_ids, new_ids) if new_id is not None]
+            valid_new_ids = [new_id for new_id in new_ids if new_id is not None]
+
+            if valid_new_ids:
+                id_map[f"{obj_name}Id"] = dict(zip(valid_original_ids, valid_new_ids))
+                print(f"  Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name} (fallback method).")
+            else:
+                print(f"  No records were successfully inserted for {obj_name}.")
 
 if __name__ == "__main__":
     main()
