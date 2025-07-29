@@ -253,6 +253,10 @@ def main():
             if 'IsPersonAccount' in cleaned_record:
                 del cleaned_record['IsPersonAccount']
 
+            # Special handling for MP_Action__c: always set LastModifiedById
+            if obj_name == 'MP_Action__c':
+                cleaned_record['LastModifiedById'] = '0052j000000kxjEAAQ'
+
             cleaned_records.append(cleaned_record)
         records_to_insert = cleaned_records
 

@@ -71,13 +71,25 @@ def main():
                 # Execute the query
                 query_result = sf.query_all(soql_query)
                 
-                # Convert the result to a pandas DataFrame
-                df = pd.DataFrame(query_result['records']).drop(columns='attributes')
-                
-                # Save the DataFrame to a CSV file in the exported_data directory
-                csv_file_name = os.path.join(data_dir, f"{obj_name}.csv")
-                df.to_csv(csv_file_name, index=False)
-                print(f"Successfully saved data for {obj_name} to {csv_file_name}")
+                # Check if there are any records
+                if query_result['records']:
+                    # Convert the result to a pandas DataFrame
+                    df = pd.DataFrame(query_result['records'])
+                    
+                    # Remove 'attributes' column if it exists
+                    if 'attributes' in df.columns:
+                        df = df.drop(columns='attributes')
+                    
+                    # Save the DataFrame to a CSV file in the exported_data directory
+                    csv_file_name = os.path.join(data_dir, f"{obj_name}.csv")
+                    df.to_csv(csv_file_name, index=False)
+                    print(f"Successfully saved data for {obj_name} to {csv_file_name}")
+                else:
+                    # No records found, create an empty CSV with just headers
+                    empty_df = pd.DataFrame(columns=field_names)
+                    csv_file_name = os.path.join(data_dir, f"{obj_name}.csv")
+                    empty_df.to_csv(csv_file_name, index=False)
+                    print(f"No records found for {obj_name}. Created empty CSV file: {csv_file_name}")
 
             except Exception as e:
                 print(f"An error occurred while processing {obj_name}: {e}")
