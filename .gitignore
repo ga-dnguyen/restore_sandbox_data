@@ -2,6 +2,7 @@
 .env
 exported_data
 exported_metadata
+mapping_data
 venv
 .sfdx
 .DS_Store

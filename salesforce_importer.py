@@ -203,6 +203,209 @@ def create_default_records(sf, default_records):
     
     return default_record_ids
 
+def save_id_mapping(obj_name, original_ids, new_ids):
+    """Save the ID mapping to a CSV file for reference and future use."""
+    if not new_ids or len(original_ids) != len(new_ids):
+        print(f"  Warning: Cannot save ID mapping for {obj_name} - mismatched ID arrays")
+        return
+    
+    # Create mapping DataFrame
+    mapping_df = pd.DataFrame({
+        'Id': original_ids,
+        'NewId': new_ids
+    })
+    
+    # Remove rows where NewId is None (failed inserts)
+    mapping_df = mapping_df.dropna(subset=['NewId'])
+    
+    # Ensure mapping_data directory exists
+    os.makedirs('mapping_data', exist_ok=True)
+    
+    # Save to CSV in mapping_data folder
+    mapping_file = os.path.join('mapping_data', f"id_mapping_{obj_name}.csv")
+    mapping_df.to_csv(mapping_file, index=False)
+    print(f"  Saved {len(mapping_df)} ID mappings to {mapping_file}")
+    
+    return mapping_df
+
+def load_all_id_mappings():
+    """Load all existing ID mappings from CSV files."""
+    mappings = {}
+    import glob
+    
+    # Find all ID mapping files in mapping_data folder
+    mapping_files = glob.glob("mapping_data/id_mapping_*.csv")
+    
+    for file in mapping_files:
+        # Extract object name from filename
+        filename = os.path.basename(file)
+        obj_name = filename.replace("id_mapping_", "").replace(".csv", "")
+        
+        try:
+            df = pd.read_csv(file)
+            if 'Id' in df.columns and 'NewId' in df.columns:
+                # Create a dictionary mapping old ID to new ID
+                mappings[obj_name] = dict(zip(df['Id'], df['NewId']))
+                print(f"  Loaded {len(mappings[obj_name])} ID mappings for {obj_name}")
+            else:
+                print(f"  Warning: Invalid mapping file format for {file}")
+        except Exception as e:
+            print(f"  Warning: Could not load ID mappings from {file}: {e}")
+    
+    return mappings
+
+def update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order):
+    """Update all lookup fields with correct new IDs after all imports are complete."""
+    print("--- Updating All Lookup Fields with New IDs ---")
+    
+    data_dir = "exported_data"
+    
+    for obj_name in import_order:
+        if obj_name not in lookup_mappings or obj_name not in all_id_mappings:
+            continue
+            
+        print(f"Updating lookup fields for {obj_name}...")
+        
+        # Load the original CSV data to get the original relationships
+        csv_path = os.path.join(data_dir, f"{obj_name}.csv")
+        if not os.path.exists(csv_path):
+            print(f"  CSV file not found for {obj_name}, skipping.")
+            continue
+            
+        try:
+            original_df = pd.read_csv(csv_path)
+            if 'Id' not in original_df.columns:
+                print(f"  'Id' column not found in {obj_name} CSV, skipping.")
+                continue
+        except Exception as e:
+            print(f"  Error reading {obj_name} CSV: {e}")
+            continue
+        
+        # Get ID mappings for this object
+        object_id_mapping = all_id_mappings[obj_name]
+        
+        if not object_id_mapping:
+            print(f"  No ID mappings found for {obj_name}, skipping.")
+            continue
+        
+        # Get lookup fields for this object
+        object_lookup_fields = lookup_mappings[obj_name]
+        
+        # Process each lookup field
+        for field_name, field_info in object_lookup_fields.items():
+            # Skip non-updateable fields
+            if not field_info.get('updateable', False):
+                continue
+                
+            # Skip if field is not in the original CSV
+            if field_name not in original_df.columns:
+                continue
+                
+            referenced_objects = field_info.get('referenceTo', [])
+            
+            # Check if we have ID mappings for the referenced objects
+            for ref_object in referenced_objects:
+                if ref_object in all_id_mappings:
+                    ref_id_mapping = all_id_mappings[ref_object]
+                    
+                    print(f"  Processing {field_name} references to {ref_object}...")
+                    
+                    # Build the updates based on original CSV relationships
+                    records_to_update = []
+                    
+                    for _, row in original_df.iterrows():
+                        original_record_id = row['Id']
+                        original_lookup_value = row.get(field_name)
+                        
+                        # Skip if no lookup value or lookup value is empty
+                        if pd.isna(original_lookup_value) or original_lookup_value == '' or original_lookup_value == ' ':
+                            continue
+                            
+                        # Get the new ID for this record
+                        if original_record_id not in object_id_mapping:
+                            continue
+                        new_record_id = object_id_mapping[original_record_id]
+                        
+                        # Get the new ID for the referenced record
+                        if original_lookup_value not in ref_id_mapping:
+                            print(f"    Warning: Referenced {ref_object} ID {original_lookup_value} not found in mappings")
+                            continue
+                        new_lookup_value = ref_id_mapping[original_lookup_value]
+                        
+                        # Add to update list
+                        records_to_update.append({
+                            'Id': new_record_id,
+                            field_name: new_lookup_value
+                        })
+                    
+                    if records_to_update:
+                        print(f"    Updating {len(records_to_update)} records with new {ref_object} IDs...")
+                        
+                        # Update in batches
+                        batch_size = 200
+                        for i in range(0, len(records_to_update), batch_size):
+                            batch = records_to_update[i:i + batch_size]
+                            try:
+                                update_results = sf.bulk.__getattr__(obj_name).update(batch)
+                                successful_updates = sum(1 for result in update_results if result.get('success'))
+                                failed_updates = len(batch) - successful_updates
+                                print(f"      Batch {i//batch_size + 1}: {successful_updates}/{len(batch)} records updated successfully")
+                                
+                                if failed_updates > 0:
+                                    print(f"        {failed_updates} updates failed")
+                                    # Show detailed error information for failed updates
+                                    for j, result in enumerate(update_results):
+                                        if not result.get('success'):
+                                            record_data = batch[j] if j < len(batch) else {}
+                                            print(f"          Failed update #{j+1}:")
+                                            print(f"            Record ID: {record_data.get('Id', 'Unknown')}")
+                                            print(f"            Field: {field_name} = {record_data.get(field_name, 'Unknown')}")
+                                            
+                                            # Extract detailed error information
+                                            if 'error' in result:
+                                                print(f"            Error: {result['error']}")
+                                            
+                                            if 'errors' in result:
+                                                if isinstance(result['errors'], list):
+                                                    for error in result['errors']:
+                                                        if isinstance(error, dict):
+                                                            error_msg = error.get('message', str(error))
+                                                            error_code = error.get('statusCode', '')
+                                                            error_fields = error.get('fields', [])
+                                                            print(f"            Error Code: {error_code}")
+                                                            print(f"            Error Message: {error_msg}")
+                                                            if error_fields:
+                                                                print(f"            Error Fields: {', '.join(error_fields)}")
+                                                        else:
+                                                            print(f"            Error: {error}")
+                                                else:
+                                                    print(f"            Errors: {result['errors']}")
+                                            
+                                            # If no specific errors found, show the full result
+                                            if 'error' not in result and 'errors' not in result:
+                                                print(f"            Full result: {result}")
+                                            
+                                            print()  # Empty line for readability
+                                            
+                                            # Limit to first 3 failures to avoid spam
+                                            if j >= 2:
+                                                remaining_failures = failed_updates - 3
+                                                if remaining_failures > 0:
+                                                    print(f"          ... and {remaining_failures} more failed updates")
+                                                break
+                                            
+                            except Exception as e:
+                                print(f"      Batch {i//batch_size + 1} failed with exception: {e}")
+                                print(f"        Exception type: {type(e).__name__}")
+                                if hasattr(e, 'content'):
+                                    print(f"        Exception content: {e.content}")
+                                if hasattr(e, 'url'):
+                                    print(f"        Request URL: {e.url}")
+                    else:
+                        print(f"    No {field_name} fields need updating for {ref_object}")
+                    
+                    break  # Only process the first matching reference type
+
 def main():
     """Main function to handle the data import process."""
     sf = get_salesforce_connection()
@@ -211,15 +414,6 @@ def main():
         return
 
     print("Successfully connected to Salesforce for import.")
-
-    # Load and create default records
-    default_records = load_default_records()
-    default_record_ids = {}
-    if default_records:
-        default_record_ids = create_default_records(sf, default_records)
-
-    # Load lookup field mappings for replacement
-    lookup_mappings = load_lookup_field_mappings()
 
     # --- Define Import Order (Parent objects first) ---
     # This order is critical. Adjust if you have different dependencies.
@@ -238,7 +432,36 @@ def main():
 
     parser = argparse.ArgumentParser(description='Import Salesforce data from CSV files.')
     parser.add_argument('--object', type=str, help='The specific Salesforce object to import (e.g., Account). If not provided, all objects will be imported.')
+    parser.add_argument('--update-lookups', action='store_true', help='Update lookup fields with new IDs after import (run this after all imports are complete).')
     args = parser.parse_args()
+
+    # If --update-lookups flag is provided, only run the lookup update process
+    if args.update_lookups:
+        # Load lookup field mappings for replacement
+        lookup_mappings = load_lookup_field_mappings()
+        
+        # Load existing ID mappings from previous imports
+        print("--- Loading Existing ID Mappings ---")
+        all_id_mappings = load_all_id_mappings()
+        
+        if all_id_mappings and lookup_mappings:
+            update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
+        else:
+            print("No ID mappings or lookup field mappings found. Import data first.")
+        return
+
+    # Load and create default records (only when importing, not when updating lookups)
+    default_records = load_default_records()
+    default_record_ids = {}
+    if default_records:
+        default_record_ids = create_default_records(sf, default_records)
+
+    # Load lookup field mappings for replacement
+    lookup_mappings = load_lookup_field_mappings()
+    
+    # Load existing ID mappings from previous imports
+    print("--- Loading Existing ID Mappings ---")
+    all_id_mappings = load_all_id_mappings()
 
     data_dir = "exported_data"
     objects_to_process = []
@@ -290,15 +513,9 @@ def main():
         fields_to_drop = list(readonly_fields.intersection(df.columns)) + ['Id'] + list(missing_fields)
         insert_df = df.drop(columns=fields_to_drop, errors='ignore')
 
-        # Replace foreign keys with new IDs from the map
-        for col in insert_df.columns:
-            if col.endswith('Id') and col in id_map:
-                print(f"  Mapping foreign key column: {col}")
-                insert_df[col] = insert_df[col].map(id_map[col])
-
-        # Replace lookup fields with default record IDs
+        # Replace lookup fields with default record IDs (no ID mapping yet)
         if default_record_ids and lookup_mappings:
-            print(f"  Checking lookup fields for default record replacement...")
+            print(f"  Replacing lookup fields with default record IDs...")
             insert_df = replace_lookup_fields_with_defaults(sf, obj_name, insert_df, default_record_ids, lookup_mappings)
 
         # Clean lookup field references that point to non-existent records
@@ -429,7 +646,15 @@ def main():
             valid_new_ids = [new_id for new_id in new_ids if new_id is not None]
 
             if valid_new_ids:
+                # Save ID mapping to CSV file
+                save_id_mapping(obj_name, valid_original_ids, valid_new_ids)
+                
+                # Update the all_id_mappings for use in subsequent objects
+                all_id_mappings[obj_name] = dict(zip(valid_original_ids, valid_new_ids))
+                
+                # Keep legacy id_map for compatibility (if needed)
                 id_map[f"{obj_name}Id"] = dict(zip(valid_original_ids, valid_new_ids))
+                
                 print(f"  Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name}.")
             else:
                 print(f"  No records were successfully inserted for {obj_name}.")
@@ -464,10 +689,27 @@ def main():
             valid_new_ids = [new_id for new_id in new_ids if new_id is not None]
 
             if valid_new_ids:
+                # Save ID mapping to CSV file
+                save_id_mapping(obj_name, valid_original_ids, valid_new_ids)
+                
+                # Update the all_id_mappings for use in subsequent objects
+                all_id_mappings[obj_name] = dict(zip(valid_original_ids, valid_new_ids))
+                
+                # Keep legacy id_map for compatibility (if needed)
                 id_map[f"{obj_name}Id"] = dict(zip(valid_original_ids, valid_new_ids))
+                
                 print(f"  Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name} (fallback method).")
             else:
                 print(f"  No records were successfully inserted for {obj_name}.")
+
+    # After all imports are complete, remind user to update lookup fields
+    if not args.object:  # Only show this message when importing all objects
+        print("\n" + "="*60)
+        print("IMPORT COMPLETE!")
+        print("="*60)
+        print("To update lookup fields with correct relationships, run:")
+        print("python3 salesforce_importer.py --update-lookups")
+        print("="*60)
 
 if __name__ == "__main__":
     main()
