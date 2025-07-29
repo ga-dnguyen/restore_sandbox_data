@@ -3,6 +3,7 @@
 exported_data
 exported_metadata
 mapping_data
+lookup_field_mappings.json
 venv
 .sfdx
 .DS_Store
