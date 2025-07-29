@@ -718,6 +718,41 @@
       "updateable": false
     }
   },
+  "Transcript__c": {
+    "OwnerId": {
+      "label": "Owner ID",
+      "referenceTo": [
+        "Group",
+        "User"
+      ],
+      "createable": true,
+      "updateable": true
+    },
+    "CreatedById": {
+      "label": "Created By ID",
+      "referenceTo": [
+        "User"
+      ],
+      "createable": true,
+      "updateable": false
+    },
+    "LastModifiedById": {
+      "label": "Last Modified By ID",
+      "referenceTo": [
+        "User"
+      ],
+      "createable": true,
+      "updateable": false
+    },
+    "Transcriptroom__c": {
+      "label": "\u90e8\u5c4b",
+      "referenceTo": [
+        "Room__c"
+      ],
+      "createable": true,
+      "updateable": true
+    }
+  },
   "MP_Action__c": {
     "OwnerId": {
       "label": "Owner ID",

@@ -107,7 +107,7 @@ def create_default_records(sf, default_records):
     default_record_ids = {}
     
     # Define creation order to handle dependencies
-    creation_order = ['Account', 'Lead', 'Apart__c', 'Opportunity', 'Room__c', 'Buyer__c']
+    creation_order = ['Account', 'Lead', 'Apart__c', 'Opportunity', 'Room__c', 'Buyer__c', 'Transcript__c']
     
     for obj_name in creation_order:
         if obj_name not in default_records:
@@ -165,6 +165,7 @@ def main():
         'Apart__c',
         'Room__c',
         'Buyer__c',
+        'Transcript__c',
         'MP_Action__c',
         'OpportunityLog__c',
         'ValuationLog__c'

@@ -27,7 +27,8 @@ def main():
         'ValuationLog__c',
         'Apart__c',
         'Room__c',
-        'Buyer__c'
+        'Buyer__c',
+        'Transcript__c'
     ]
 
     # Ensure the exported_data and exported_metadata directories exist

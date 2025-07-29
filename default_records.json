@@ -19,5 +19,8 @@
     },
     "Room__c": {
         "Name": "101"
+    },
+    "Transcript__c": {
+        "Name": "Transcript Default"
     }
 }
