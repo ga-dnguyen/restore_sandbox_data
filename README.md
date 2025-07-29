@@ -167,7 +167,39 @@ This exports all your data to CSV files in `exported_data/` folder.
 
 #### After Sandbox Refresh: Restore Data
 
-### Step 1: Analyze Lookup Fields (Optional)
+### Step 1: Prepare Salesforce Org
+
+Before importing data, ensure your refreshed sandbox is properly configured:
+
+#### 1.1 Deactivate Flows
+
+Deactivate these flows to prevent interference during data import:
+
+- **MP_001_Send Action Notification Slack**
+- **MP_009_KNB の MP アクション作成時、活動登録をする**
+
+**How to deactivate:**
+
+1. Go to Setup → Flow → Flow Builder
+2. Search for each flow name
+3. Click on the flow and select "Deactivate"
+4. Confirm deactivation
+
+#### 1.2 Grant Lead Permissions
+
+Grant the following permission to the user profile used for data import:
+
+- **View and Edit Converted Leads**
+
+**How to grant permission:**
+
+1. Go to Setup → Users → Profiles
+2. Find and edit the profile of your import user
+3. Go to Object Settings → Leads
+4. Enable "View and Edit Converted Leads" permission
+5. Save the profile changes
+
+### Step 2: Analyze Lookup Fields (Optional)
 
 Generate lookup field mappings for your refreshed org:
 
@@ -177,7 +209,7 @@ python3 get_lookup_fields.py
 
 This creates `lookup_field_mappings.json` with field metadata.
 
-### Step 2: Import Data (Phase 1)
+### Step 3: Import Data (Phase 1)
 
 Import all records with default lookup values:
 
@@ -196,7 +228,7 @@ python3 salesforce_importer.py --object Account
 - Generates ID mapping files in `mapping_data/` folder
 - Shows detailed progress and error information
 
-### Step 3: Update Relationships (Phase 2)
+### Step 4: Update Relationships (Phase 2)
 
 Restore original relationships using ID mappings:
 
@@ -335,16 +367,20 @@ python3 salesforce_exporter.py
 
 # 5. AFTER refresh: Update .env with new sandbox credentials
 
-# 6. Analyze your refreshed org (optional)
+# 6. Prepare Salesforce org (IMPORTANT!)
+# - Deactivate flows: MP_001_Send Action Notification Slack and MP_009_KNBのMPアクション作成時、活動登録をする
+# - Grant "View and Edit Converted Leads" permission to import user profile
+
+# 7. Analyze your refreshed org (optional)
 python3 get_lookup_fields.py
 
-# 7. Restore all data
+# 8. Restore all data
 python3 salesforce_importer.py
 
-# 8. Restore relationships
+# 9. Restore relationships
 python3 salesforce_importer.py --update-lookups
 
-# 9. Verify results in Salesforce org
+# 10. Verify results in Salesforce org
 ```
 
 ### Daily/Weekly Backup Workflow
