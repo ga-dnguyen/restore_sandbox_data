@@ -4,6 +4,31 @@ from dotenv import load_dotenv
 from simple_salesforce import Salesforce
 import argparse
 import json
+import logging
+from datetime import datetime
+
+def setup_logging():
+    """Set up logging to file with timestamp."""
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    
+    # Generate timestamp for log filename (YYYYMMDD_HHSS format)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    log_filename = os.path.join('logs', f'import_log_{timestamp}.log')
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_filename),
+            logging.StreamHandler()  # Also log to console
+        ]
+    )
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Import session started - Log file: {log_filename}")
+    return logger
 
 def get_salesforce_connection():
     """Establishes and returns a Salesforce connection."""
@@ -202,6 +227,33 @@ def create_default_records(sf, default_records):
             print(f"  Error creating default {obj_name} record: {e}")
     
     return default_record_ids
+
+def filter_out_default_records(df, obj_name, default_records):
+    """Remove default records from DataFrame if they exist in CSV data."""
+    if obj_name not in default_records:
+        return df
+    
+    default_record_data = default_records[obj_name]
+    original_count = len(df)
+    
+    # Create a mask to identify default records
+    is_default_mask = pd.Series([True] * len(df))
+    
+    # Check each field in the default record definition
+    for field_name, expected_value in default_record_data.items():
+        if field_name in df.columns:
+            # Records must match ALL fields to be considered default records
+            field_mask = df[field_name] == expected_value
+            is_default_mask = is_default_mask & field_mask
+    
+    # Filter out default records
+    filtered_df = df[~is_default_mask].copy()
+    removed_count = original_count - len(filtered_df)
+    
+    if removed_count > 0:
+        print(f"  Removed {removed_count} default {obj_name} record(s) from CSV data (already created in Apex)")
+    
+    return filtered_df
 
 def save_id_mapping(obj_name, original_ids, new_ids):
     """Save the ID mapping to a CSV file for reference and future use."""
@@ -408,11 +460,16 @@ def update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
 
 def main():
     """Main function to handle the data import process."""
+    # Set up logging first
+    logger = setup_logging()
+    
     sf = get_salesforce_connection()
     if not sf:
+        logger.error("Failed to connect to Salesforce. Exiting.")
         print("Failed to connect to Salesforce. Exiting.")
         return
 
+    logger.info("Successfully connected to Salesforce for import.")
     print("Successfully connected to Salesforce for import.")
 
     # --- Define Import Order (Parent objects first) ---
@@ -437,29 +494,37 @@ def main():
 
     # If --update-lookups flag is provided, only run the lookup update process
     if args.update_lookups:
+        logger.info("Starting lookup field update process")
         # Load lookup field mappings for replacement
         lookup_mappings = load_lookup_field_mappings()
         
         # Load existing ID mappings from previous imports
+        logger.info("Loading existing ID mappings")
         print("--- Loading Existing ID Mappings ---")
         all_id_mappings = load_all_id_mappings()
         
         if all_id_mappings and lookup_mappings:
             update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
+            logger.info("Lookup field update process completed")
         else:
+            logger.warning("No ID mappings or lookup field mappings found. Import data first.")
             print("No ID mappings or lookup field mappings found. Import data first.")
         return
 
     # Load and create default records (only when importing, not when updating lookups)
+    logger.info("Loading default records configuration")
     default_records = load_default_records()
     default_record_ids = {}
     if default_records:
+        logger.info("Creating default records in Salesforce")
         default_record_ids = create_default_records(sf, default_records)
 
     # Load lookup field mappings for replacement
+    logger.info("Loading lookup field mappings")
     lookup_mappings = load_lookup_field_mappings()
     
     # Load existing ID mappings from previous imports
+    logger.info("Loading existing ID mappings")
     print("--- Loading Existing ID Mappings ---")
     all_id_mappings = load_all_id_mappings()
 
@@ -470,29 +535,57 @@ def main():
         # If a specific object is provided, only process that one.
         if args.object in import_order:
             objects_to_process = [args.object]
+            logger.info(f"Processing single object: {args.object}")
         else:
+            logger.error(f"Object '{args.object}' is not in the defined import_order list.")
             print(f"Error: Object '{args.object}' is not in the defined import_order list.")
             return
     else:
         # Otherwise, process all objects defined in the import order.
         objects_to_process = import_order
+        logger.info(f"Processing all objects: {', '.join(import_order)}")
 
     id_map = {}
+    total_objects = len(objects_to_process)
+    processed_objects = 0
 
     for obj_name in objects_to_process:
+        processed_objects += 1
+        logger.info(f"Processing object {processed_objects}/{total_objects}: {obj_name}")
+        
         csv_path = os.path.join(data_dir, f"{obj_name}.csv")
         if not os.path.exists(csv_path):
+            logger.warning(f"CSV file not found for {obj_name}, skipping.")
             print(f"CSV file not found for {obj_name}, skipping.")
             continue
         print(f"--- Processing {obj_name} --- ")
         df = pd.read_csv(csv_path)
 
         if 'Id' not in df.columns:
+            logger.error(f"'Id' column not found in {csv_path}, skipping.")
             print(f"'Id' column not found in {csv_path}, skipping.")
             continue
 
         # Store original IDs
         original_ids = df['Id'].tolist()
+
+        # Filter out default records if they exist in CSV (they're created in Apex)
+        default_records = load_default_records()
+        if default_records:
+            logger.info(f"Filtering out default records for {obj_name}")
+            print(f"  Filtering out default records...")
+            df = filter_out_default_records(df, obj_name, default_records)
+            
+            # If all records were filtered out, skip this object
+            if len(df) == 0:
+                logger.info(f"No records remaining after filtering default records for {obj_name}, skipping.")
+                print(f"  No records remaining after filtering default records for {obj_name}, skipping.")
+                continue
+            
+            # Update original_ids list after filtering
+            original_ids = df['Id'].tolist()
+
+        logger.info(f"Starting data processing for {obj_name} with {len(df)} records")
 
         # Clean data for insertion
         readonly_fields = get_readonly_fields(sf, obj_name)
@@ -618,6 +711,7 @@ def main():
                         failed_records.append(error_info)
                 
                 print(f"    Bulk operation completed: {successful_inserts} successful, {len(bulk_results) - successful_inserts} failed")
+                logger.info(f"Bulk operation for {obj_name}: {successful_inserts} successful, {len(bulk_results) - successful_inserts} failed")
                 
                 # Display detailed error information for failed records
                 if failed_records:
@@ -655,11 +749,14 @@ def main():
                 # Keep legacy id_map for compatibility (if needed)
                 id_map[f"{obj_name}Id"] = dict(zip(valid_original_ids, valid_new_ids))
                 
+                logger.info(f"Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name}")
                 print(f"  Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name}.")
             else:
+                logger.warning(f"No records were successfully inserted for {obj_name}")
                 print(f"  No records were successfully inserted for {obj_name}.")
 
         except Exception as e:
+            logger.error(f"Error during bulk insert for {obj_name}: {e}")
             print(f"An error occurred during bulk insert for {obj_name}: {e}")
             print("Falling back to single record insert...")
             
@@ -698,18 +795,23 @@ def main():
                 # Keep legacy id_map for compatibility (if needed)
                 id_map[f"{obj_name}Id"] = dict(zip(valid_original_ids, valid_new_ids))
                 
+                logger.info(f"Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name} (fallback method)")
                 print(f"  Successfully inserted {successful_inserts} of {len(records_to_insert)} records for {obj_name} (fallback method).")
             else:
+                logger.warning(f"No records were successfully inserted for {obj_name} (fallback method)")
                 print(f"  No records were successfully inserted for {obj_name}.")
 
     # After all imports are complete, remind user to update lookup fields
     if not args.object:  # Only show this message when importing all objects
+        logger.info("Import process completed successfully")
         print("\n" + "="*60)
         print("IMPORT COMPLETE!")
         print("="*60)
         print("To update lookup fields with correct relationships, run:")
         print("python3 salesforce_importer.py --update-lookups")
         print("="*60)
+    else:
+        logger.info(f"Single object import completed for {args.object}")
 
 if __name__ == "__main__":
     main()
