@@ -1,0 +1,10 @@
+2025-07-30 10:34:27,243 - INFO - Import session started - Log file: logs/import_log_20250730_1034.log
+2025-07-30 10:34:27,674 - INFO - Successfully connected to Salesforce for import.
+2025-07-30 10:34:27,676 - INFO - Loading default records configuration
+2025-07-30 10:34:27,676 - INFO - Creating default records in Salesforce
+2025-07-30 10:34:40,786 - INFO - Loading lookup field mappings
+2025-07-30 10:34:40,789 - INFO - Loading existing ID mappings
+2025-07-30 10:34:40,811 - INFO - Processing single object: Task
+2025-07-30 10:34:40,811 - INFO - Processing object 1/1: Task
+2025-07-30 10:34:40,811 - WARNING - CSV file not found for Task, skipping.
+2025-07-30 10:34:40,811 - INFO - Single object import completed for Task

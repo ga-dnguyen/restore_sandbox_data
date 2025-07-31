@@ -1,0 +1,13 @@
+2025-07-30 12:34:29,554 - INFO - Import session started - Log file: logs/import_log_20250730_1234.log
+2025-07-30 12:34:29,990 - INFO - Successfully connected to Salesforce for import.
+2025-07-30 12:34:29,992 - INFO - Loading default records configuration
+2025-07-30 12:34:29,993 - INFO - Creating default records in Salesforce
+2025-07-30 12:34:41,410 - INFO - Loading lookup field mappings
+2025-07-30 12:34:41,413 - INFO - Loading existing ID mappings
+2025-07-30 12:34:41,437 - INFO - Processing single object: Task
+2025-07-30 12:34:41,437 - INFO - Processing object 1/1: Task
+2025-07-30 12:34:41,443 - INFO - Filtering out default records for Task
+2025-07-30 12:34:41,443 - INFO - Starting data processing for Task with 37 records
+2025-07-30 12:34:56,825 - INFO - Bulk operation for Task: 35 successful, 2 failed
+2025-07-30 12:34:56,834 - INFO - Successfully inserted 35 of 37 records for Task
+2025-07-30 12:34:56,834 - INFO - Single object import completed for Task

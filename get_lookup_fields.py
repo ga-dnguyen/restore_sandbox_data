@@ -49,7 +49,7 @@ def main():
     
     # Objects to analyze
     objects_to_analyze = [
-        'Account', 'Lead', 'Opportunity', 'Apart__c', 
+        'Account', 'Lead', 'Task', 'Opportunity', 'Apart__c', 
         'Room__c', 'Buyer__c', 'Transcript__c', 'MP_Action__c', 
         'OpportunityLog__c', 'ValuationLog__c'
     ]

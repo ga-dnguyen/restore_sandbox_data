@@ -20,6 +20,7 @@ def main():
     # List of objects to query
     objects_to_query = [
         'Lead',
+        'Task',
         'Opportunity',
         'Account',
         'MP_Action__c',

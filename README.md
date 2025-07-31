@@ -111,12 +111,14 @@ BackupSandbox/
 ├── exported_data/                # CSV files to import
 │   ├── Account.csv
 │   ├── Lead.csv
+│   ├── Task.csv
 │   ├── Opportunity.csv
 │   └── ...
 ├── exported_metadata/             # Metadata files (auto-generated)
 └── mapping_data/                  # ID mapping files (auto-generated)
     ├── id_mapping_Account.csv
     ├── id_mapping_Lead.csv
+    ├── id_mapping_Task.csv
     └── ...
 ```
 
@@ -145,7 +147,7 @@ Define default records for lookup fields:
 
 - All CSV files must have an `Id` column with original Salesforce IDs
 - Place CSV files in the `exported_data/` folder
-- Supported objects: Account, Lead, Opportunity, Apart**c, Room**c, Buyer**c, Transcript**c, MP_Action**c, OpportunityLog**c, ValuationLog\_\_c
+- Supported objects: Account, Lead, Task, Opportunity, Apart**c, Room**c, Buyer**c, Transcript**c, MP_Action**c, OpportunityLog**c, ValuationLog\_\_c
 
 ## Usage
 
@@ -251,14 +253,15 @@ Objects are imported in dependency order:
 
 1. Account
 2. Lead
-3. Opportunity
-4. Apart\_\_c
-5. Room\_\_c
-6. Buyer\_\_c
-7. Transcript\_\_c
-8. MP_Action\_\_c
-9. OpportunityLog\_\_c
-10. ValuationLog\_\_c
+3. Task
+4. Opportunity
+5. Apart\_\_c
+6. Room\_\_c
+7. Buyer\_\_c
+8. Transcript\_\_c
+9. MP_Action\_\_c
+10. OpportunityLog\_\_c
+11. ValuationLog\_\_c
 
 ### Error Handling
 

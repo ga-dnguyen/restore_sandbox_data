@@ -104,6 +104,79 @@ def clean_lookup_references(sf, obj_name, insert_df, lookup_mappings):
         unique_ids = modified_df.loc[non_null_mask, field_name].unique()
         referenced_objects = field_info.get('referenceTo', [])
         
+        # Special handling for Task object lookup fields using ID prefixes
+        if obj_name == 'Task' and field_name in ['WhatId', 'WhoId']:
+            print(f"  Validating {field_name} references using ID prefix detection...")
+            
+            # Group IDs by object type based on prefix
+            ids_by_object_type = {}
+            invalid_ids = []
+            
+            for unique_id in unique_ids:
+                if not isinstance(unique_id, str) or len(unique_id) < 3:
+                    invalid_ids.append(unique_id)
+                    continue
+                    
+                # Check ID prefix to determine object type
+                id_prefix = unique_id[:3]
+                target_object = None
+                
+                if id_prefix == '001':  # Account
+                    target_object = 'Account'
+                elif id_prefix == '006':  # Opportunity
+                    target_object = 'Opportunity'
+                elif id_prefix == '00Q':  # Lead
+                    target_object = 'Lead'
+                
+                if target_object and target_object in referenced_objects:
+                    if target_object not in ids_by_object_type:
+                        ids_by_object_type[target_object] = []
+                    ids_by_object_type[target_object].append(unique_id)
+                else:
+                    invalid_ids.append(unique_id)
+            
+            # Clear invalid IDs (unknown prefixes or unsupported object types)
+            if invalid_ids:
+                print(f"    Clearing {len(invalid_ids)} {field_name} values with unsupported/invalid ID prefixes")
+                for invalid_id in invalid_ids:
+                    mask = modified_df[field_name] == invalid_id
+                    modified_df.loc[mask, field_name] = None
+            
+            # Validate IDs by object type
+            for target_object, ids_to_check in ids_by_object_type.items():
+                try:
+                    # Test a sample of IDs to see if they exist
+                    test_ids = list(ids_to_check[:5])  # Test first 5 IDs
+                    id_list = "','".join(test_ids)
+                    query = f"SELECT Id FROM {target_object} WHERE Id IN ('{id_list}')"
+                    results = sf.query(query)
+                    
+                    existing_ids = {record['Id'] for record in results['records']}
+                    missing_count = len([id for id in test_ids if id not in existing_ids])
+                    
+                    if missing_count > 0:
+                        print(f"    Warning: {missing_count}/{len(test_ids)} sampled {field_name} references to {target_object} don't exist")
+                        if missing_count == len(test_ids):
+                            # If all sampled IDs are missing, clear all IDs for this object type
+                            print(f"    Clearing all {field_name} values referencing {target_object} (all sampled references missing)")
+                            for missing_id in ids_to_check:
+                                mask = modified_df[field_name] == missing_id
+                                modified_df.loc[mask, field_name] = None
+                        else:
+                            # If only some are missing, keep the field values and let Salesforce handle validation
+                            print(f"    Keeping {field_name} values referencing {target_object} (some references exist)")
+                    
+                except Exception as e:
+                    print(f"    Could not validate {field_name} references to {target_object}: {e}")
+                    # If we can't validate, clear all IDs for this object type to be safe
+                    print(f"    Clearing all {field_name} values referencing {target_object} due to validation error")
+                    for error_id in ids_to_check:
+                        mask = modified_df[field_name] == error_id
+                        modified_df.loc[mask, field_name] = None
+            
+            continue  # Skip the default logic for Task WhatId/WhoId fields
+        
+        # Default behavior for all other objects and fields
         # Check if referenced records exist for each referenced object type
         for ref_object in referenced_objects:
             try:
@@ -178,7 +251,46 @@ def replace_lookup_fields_with_defaults(sf, obj_name, insert_df, default_record_
             
         referenced_objects = field_info.get('referenceTo', [])
         
-        # Find matching default record for this lookup field
+        # Special handling for Task object lookup fields using ID prefixes
+        if obj_name == 'Task' and field_name in ['WhatId', 'WhoId']:
+            # Get all non-null values for this field
+            non_null_mask = modified_df[field_name].notna() & (modified_df[field_name] != '') & (modified_df[field_name] != ' ')
+            if not non_null_mask.any():
+                continue
+                
+            # Process each non-null value to determine object type from ID prefix
+            replacement_count = 0
+            
+            for idx in modified_df[non_null_mask].index:
+                original_id = modified_df.loc[idx, field_name]
+                if not isinstance(original_id, str) or len(original_id) < 3:
+                    continue
+                    
+                # Check ID prefix to determine object type
+                id_prefix = original_id[:3]
+                target_object = None
+                
+                if id_prefix == '001':  # Account
+                    target_object = 'Account'
+                elif id_prefix == '006':  # Opportunity
+                    target_object = 'Opportunity'
+                elif id_prefix == '00Q':  # Lead
+                    target_object = 'Lead'
+                
+                # Replace with appropriate default record if available
+                if target_object and target_object in default_record_ids:
+                    modified_df.loc[idx, field_name] = default_record_ids[target_object]
+                    replacement_count += 1
+                elif target_object:
+                    # Clear the field if we know the object type but don't have a default record
+                    modified_df.loc[idx, field_name] = None
+                    print(f"    Cleared {field_name} value (no default {target_object} record available)")
+            
+            if replacement_count > 0:
+                print(f"  Replaced {replacement_count} {field_name} values with appropriate default record IDs based on ID prefixes")
+            continue
+        
+        # Default behavior for all other objects and fields
         for ref_object in referenced_objects:
             if ref_object in default_record_ids:
                 # Only replace non-blank values (not NaN, not None, not empty string)
@@ -355,6 +467,130 @@ def update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
                 
             referenced_objects = field_info.get('referenceTo', [])
             
+            # Special handling for Task object lookup fields using ID prefixes
+            if obj_name == 'Task' and field_name in ['WhatId', 'WhoId']:
+                print(f"  Processing {field_name} with ID prefix detection...")
+                
+                # Group records by the object type they reference (based on ID prefix)
+                records_by_object_type = {}
+                
+                for _, row in original_df.iterrows():
+                    original_record_id = row['Id']
+                    original_lookup_value = row.get(field_name)
+                    
+                    # Skip if no lookup value or lookup value is empty
+                    if pd.isna(original_lookup_value) or original_lookup_value == '' or original_lookup_value == ' ':
+                        continue
+                    
+                    # Get the new ID for this record
+                    if original_record_id not in object_id_mapping:
+                        continue
+                    new_record_id = object_id_mapping[original_record_id]
+                    
+                    # Determine object type from ID prefix
+                    if not isinstance(original_lookup_value, str) or len(original_lookup_value) < 3:
+                        continue
+                        
+                    id_prefix = original_lookup_value[:3]
+                    target_object = None
+                    
+                    if id_prefix == '001':  # Account
+                        target_object = 'Account'
+                    elif id_prefix == '006':  # Opportunity
+                        target_object = 'Opportunity'
+                    elif id_prefix == '00Q':  # Lead
+                        target_object = 'Lead'
+                    
+                    # Only proceed if we have ID mappings for this object type
+                    if target_object and target_object in all_id_mappings:
+                        ref_id_mapping = all_id_mappings[target_object]
+                        
+                        # Get the new ID for the referenced record
+                        if original_lookup_value in ref_id_mapping:
+                            new_lookup_value = ref_id_mapping[original_lookup_value]
+                            
+                            # Group by target object type
+                            if target_object not in records_by_object_type:
+                                records_by_object_type[target_object] = []
+                            
+                            records_by_object_type[target_object].append({
+                                'Id': new_record_id,
+                                field_name: new_lookup_value
+                            })
+                        else:
+                            print(f"    Warning: Referenced {target_object} ID {original_lookup_value} not found in mappings")
+                
+                # Update records grouped by object type
+                for target_object, records_to_update in records_by_object_type.items():
+                    if records_to_update:
+                        print(f"    Updating {len(records_to_update)} {field_name} references to {target_object}...")
+                        
+                        # Update in batches
+                        batch_size = 200
+                        for i in range(0, len(records_to_update), batch_size):
+                            batch = records_to_update[i:i + batch_size]
+                            try:
+                                update_results = sf.bulk.__getattr__(obj_name).update(batch)
+                                successful_updates = sum(1 for result in update_results if result.get('success'))
+                                failed_updates = len(batch) - successful_updates
+                                print(f"      Batch {i//batch_size + 1}: {successful_updates}/{len(batch)} records updated successfully")
+                                
+                                if failed_updates > 0:
+                                    print(f"        {failed_updates} updates failed")
+                                    # Show detailed error information for failed updates
+                                    for j, result in enumerate(update_results):
+                                        if not result.get('success'):
+                                            record_data = batch[j] if j < len(batch) else {}
+                                            print(f"          Failed update #{j+1}:")
+                                            print(f"            Record ID: {record_data.get('Id', 'Unknown')}")
+                                            print(f"            Field: {field_name} = {record_data.get(field_name, 'Unknown')}")
+                                            
+                                            # Extract detailed error information
+                                            if 'error' in result:
+                                                print(f"            Error: {result['error']}")
+                                            
+                                            if 'errors' in result:
+                                                if isinstance(result['errors'], list):
+                                                    for error in result['errors']:
+                                                        if isinstance(error, dict):
+                                                            error_msg = error.get('message', str(error))
+                                                            error_code = error.get('statusCode', '')
+                                                            error_fields = error.get('fields', [])
+                                                            print(f"            Error Code: {error_code}")
+                                                            print(f"            Error Message: {error_msg}")
+                                                            if error_fields:
+                                                                print(f"            Error Fields: {', '.join(error_fields)}")
+                                                        else:
+                                                            print(f"            Error: {error}")
+                                                else:
+                                                    print(f"            Errors: {result['errors']}")
+                                            
+                                            # If no specific errors found, show the full result
+                                            if 'error' not in result and 'errors' not in result:
+                                                print(f"            Full result: {result}")
+                                            
+                                            print()  # Empty line for readability
+                                            
+                                            # Limit to first 3 failures to avoid spam
+                                            if j >= 2:
+                                                remaining_failures = failed_updates - 3
+                                                if remaining_failures > 0:
+                                                    print(f"          ... and {remaining_failures} more failed updates")
+                                                break
+                                                
+                            except Exception as e:
+                                print(f"      Batch {i//batch_size + 1} failed with exception: {e}")
+                                print(f"        Exception type: {type(e).__name__}")
+                                if hasattr(e, 'content'):
+                                    print(f"        Exception content: {e.content}")
+                                if hasattr(e, 'url'):
+                                    print(f"        Request URL: {e.url}")
+                    else:
+                        print(f"    No {field_name} fields need updating for {target_object}")
+                
+                continue  # Skip the default logic for Task WhatId/WhoId fields
+            
+            # Default behavior for all other objects and fields
             # Check if we have ID mappings for the referenced objects
             for ref_object in referenced_objects:
                 if ref_object in all_id_mappings:
@@ -477,6 +713,7 @@ def main():
     import_order = [
         'Account',
         'Lead',
+        'Task',
         'Opportunity',
         'Apart__c',
         'Room__c',

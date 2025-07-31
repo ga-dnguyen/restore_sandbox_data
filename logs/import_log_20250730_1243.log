@@ -1,0 +1,61 @@
+2025-07-30 12:43:41,260 - INFO - Import session started - Log file: logs/import_log_20250730_1243.log
+2025-07-30 12:43:41,680 - INFO - Successfully connected to Salesforce for import.
+2025-07-30 12:43:41,681 - INFO - Loading default records configuration
+2025-07-30 12:43:41,683 - INFO - Creating default records in Salesforce
+2025-07-30 12:43:51,148 - INFO - Loading lookup field mappings
+2025-07-30 12:43:51,149 - INFO - Loading existing ID mappings
+2025-07-30 12:43:51,167 - INFO - Processing all objects: Account, Lead, Task, Opportunity, Apart__c, Room__c, Buyer__c, Transcript__c, MP_Action__c, OpportunityLog__c, ValuationLog__c
+2025-07-30 12:43:51,168 - INFO - Processing object 1/11: Account
+2025-07-30 12:43:51,174 - INFO - Filtering out default records for Account
+2025-07-30 12:43:51,176 - INFO - Starting data processing for Account with 9 records
+2025-07-30 12:44:00,110 - INFO - Bulk operation for Account: 9 successful, 0 failed
+2025-07-30 12:44:00,119 - INFO - Successfully inserted 9 of 9 records for Account
+2025-07-30 12:44:00,119 - INFO - Processing object 2/11: Lead
+2025-07-30 12:44:00,139 - INFO - Filtering out default records for Lead
+2025-07-30 12:44:00,140 - INFO - Starting data processing for Lead with 153 records
+2025-07-30 12:44:21,736 - INFO - Bulk operation for Lead: 153 successful, 0 failed
+2025-07-30 12:44:21,743 - INFO - Successfully inserted 153 of 153 records for Lead
+2025-07-30 12:44:21,743 - INFO - Processing object 3/11: Task
+2025-07-30 12:44:21,752 - INFO - Filtering out default records for Task
+2025-07-30 12:44:21,752 - INFO - Starting data processing for Task with 37 records
+2025-07-30 12:44:34,803 - INFO - Bulk operation for Task: 35 successful, 2 failed
+2025-07-30 12:44:34,810 - INFO - Successfully inserted 35 of 37 records for Task
+2025-07-30 12:44:34,810 - INFO - Processing object 4/11: Opportunity
+2025-07-30 12:44:34,829 - INFO - Filtering out default records for Opportunity
+2025-07-30 12:44:34,830 - INFO - Starting data processing for Opportunity with 19 records
+2025-07-30 12:44:49,222 - INFO - Bulk operation for Opportunity: 19 successful, 0 failed
+2025-07-30 12:44:49,227 - INFO - Successfully inserted 19 of 19 records for Opportunity
+2025-07-30 12:44:49,227 - INFO - Processing object 5/11: Apart__c
+2025-07-30 12:44:49,241 - INFO - Filtering out default records for Apart__c
+2025-07-30 12:44:49,241 - INFO - Starting data processing for Apart__c with 86 records
+2025-07-30 12:44:57,039 - INFO - Bulk operation for Apart__c: 86 successful, 0 failed
+2025-07-30 12:44:57,043 - INFO - Successfully inserted 86 of 86 records for Apart__c
+2025-07-30 12:44:57,043 - INFO - Processing object 6/11: Room__c
+2025-07-30 12:44:57,048 - INFO - Filtering out default records for Room__c
+2025-07-30 12:44:57,048 - INFO - Starting data processing for Room__c with 80 records
+2025-07-30 12:45:04,253 - INFO - Bulk operation for Room__c: 80 successful, 0 failed
+2025-07-30 12:45:04,259 - INFO - Successfully inserted 80 of 80 records for Room__c
+2025-07-30 12:45:04,259 - INFO - Processing object 7/11: Buyer__c
+2025-07-30 12:45:04,264 - INFO - Filtering out default records for Buyer__c
+2025-07-30 12:45:04,265 - INFO - Starting data processing for Buyer__c with 1 records
+2025-07-30 12:45:11,727 - INFO - Bulk operation for Buyer__c: 1 successful, 0 failed
+2025-07-30 12:45:11,734 - INFO - Successfully inserted 1 of 1 records for Buyer__c
+2025-07-30 12:45:11,734 - INFO - Processing object 8/11: Transcript__c
+2025-07-30 12:45:11,746 - INFO - Filtering out default records for Transcript__c
+2025-07-30 12:45:11,747 - INFO - Starting data processing for Transcript__c with 616 records
+2025-07-30 12:45:19,628 - INFO - Bulk operation for Transcript__c: 616 successful, 0 failed
+2025-07-30 12:45:19,637 - INFO - Successfully inserted 616 of 616 records for Transcript__c
+2025-07-30 12:45:19,637 - INFO - Processing object 9/11: MP_Action__c
+2025-07-30 12:45:19,662 - INFO - Filtering out default records for MP_Action__c
+2025-07-30 12:45:19,662 - INFO - Starting data processing for MP_Action__c with 581 records
+2025-07-30 12:45:29,897 - INFO - Bulk operation for MP_Action__c: 581 successful, 0 failed
+2025-07-30 12:45:29,906 - INFO - Successfully inserted 581 of 581 records for MP_Action__c
+2025-07-30 12:45:29,906 - INFO - Processing object 10/11: OpportunityLog__c
+2025-07-30 12:45:29,913 - INFO - Filtering out default records for OpportunityLog__c
+2025-07-30 12:45:29,913 - INFO - Starting data processing for OpportunityLog__c with 10 records
+2025-07-30 12:45:37,649 - INFO - Bulk operation for OpportunityLog__c: 10 successful, 0 failed
+2025-07-30 12:45:37,654 - INFO - Successfully inserted 10 of 10 records for OpportunityLog__c
+2025-07-30 12:45:37,654 - INFO - Processing object 11/11: ValuationLog__c
+2025-07-30 12:45:37,658 - INFO - Filtering out default records for ValuationLog__c
+2025-07-30 12:45:37,658 - INFO - No records remaining after filtering default records for ValuationLog__c, skipping.
+2025-07-30 12:45:37,658 - INFO - Import process completed successfully
