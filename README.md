@@ -114,7 +114,6 @@ BackupSandbox/
 │   ├── Task.csv
 │   ├── Opportunity.csv
 │   └── ...
-├── exported_metadata/             # Metadata files (auto-generated)
 └── mapping_data/                  # ID mapping files (auto-generated)
     ├── id_mapping_Account.csv
     ├── id_mapping_Lead.csv
@@ -343,7 +342,6 @@ For detailed debugging, check the console output which includes:
 | `lookup_field_mappings.json` | Contains field metadata and relationship information |
 | `requirements.txt`           | Python package dependencies                          |
 | `exported_data/*.csv`        | Source data files to import                          |
-| `exported_metadata/*.csv`    | Metadata files for field information                 |
 | `mapping_data/*.csv`         | Generated ID mappings (old→new)                      |
 
 ## Example Workflow

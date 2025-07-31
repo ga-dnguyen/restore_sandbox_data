@@ -32,11 +32,9 @@ def main():
         'Transcript__c'
     ]
 
-    # Ensure the exported_data and exported_metadata directories exist
+    # Ensure the exported_data directory exists
     data_dir = "exported_data"
-    metadata_dir = "exported_metadata"
     os.makedirs(data_dir, exist_ok=True)
-    os.makedirs(metadata_dir, exist_ok=True)
 
     try:
         # Connect to Salesforce using OAuth2
@@ -56,15 +54,6 @@ def main():
                 sobject = getattr(sf, obj_name)
                 sobject_desc = sobject.describe()
                 field_names = [field['name'] for field in sobject_desc['fields']]
-
-                # Export metadata: field API name and type
-                metadata_rows = [
-                    {"api_name": field['name'], "type": field['type']} for field in sobject_desc['fields']
-                ]
-                metadata_df = pd.DataFrame(metadata_rows)
-                metadata_file_name = os.path.join(metadata_dir, f"{obj_name}.csv")
-                metadata_df.to_csv(metadata_file_name, index=False)
-                print(f"Successfully saved metadata for {obj_name} to {metadata_file_name}")
 
                 # Construct the SOQL query
                 soql_query = f"SELECT {', '.join(field_names)} FROM {obj_name}"
