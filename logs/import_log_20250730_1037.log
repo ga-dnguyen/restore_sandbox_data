@@ -1,5 +1,0 @@
-2025-07-30 10:37:23,154 - INFO - Import session started - Log file: logs/import_log_20250730_1037.log
-2025-07-30 10:37:23,510 - INFO - Successfully connected to Salesforce for import.
-2025-07-30 10:37:23,512 - INFO - Starting lookup field update process
-2025-07-30 10:37:23,514 - INFO - Loading existing ID mappings
-2025-07-30 10:37:23,635 - INFO - Lookup field update process completed

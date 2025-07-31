@@ -1,10 +1,11 @@
 # Ignore the .env file
 __pycache__/
 .env
-exported_data
-exported_metadata
-mapping_data
+exported_data/
+exported_metadata/
+mapping_data/
+logs/
 lookup_field_mappings.json
-venv
+venv/
 .sfdx
 .DS_Store
