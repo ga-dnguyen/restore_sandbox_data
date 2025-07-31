@@ -80,6 +80,50 @@ def get_available_fields(sf, object_name):
         print(f"Could not describe object {object_name}: {e}")
         return set()
 
+def validate_and_replace_user_ids(sf, insert_df, default_user_id='005BL000000IBL8YAO'):
+    """Validate User IDs and replace non-existent ones with default User ID."""
+    user_fields = ['CreatedById', 'LastModifiedById', 'OwnerId']
+    
+    for field_name in user_fields:
+        if field_name not in insert_df.columns:
+            continue
+            
+        # Get all non-null User IDs for this field
+        non_null_mask = insert_df[field_name].notna() & (insert_df[field_name] != '') & (insert_df[field_name] != ' ')
+        if not non_null_mask.any():
+            continue
+            
+        unique_user_ids = insert_df.loc[non_null_mask, field_name].unique()
+        
+        # Filter to only User IDs (starting with '005')
+        user_ids_to_check = [uid for uid in unique_user_ids if isinstance(uid, str) and uid.startswith('005')]
+        
+        if not user_ids_to_check:
+            continue
+            
+        try:
+            # Check which User IDs exist in the org
+            id_list = "','".join(user_ids_to_check)
+            query = f"SELECT Id FROM User WHERE Id IN ('{id_list}') AND IsActive = true"
+            results = sf.query(query)
+            
+            existing_user_ids = {record['Id'] for record in results['records']}
+            missing_user_ids = [uid for uid in user_ids_to_check if uid not in existing_user_ids]
+            
+            if missing_user_ids:
+                print(f"  Replacing {len(missing_user_ids)} non-existent User IDs in {field_name} with default: {default_user_id}")
+                for missing_id in missing_user_ids:
+                    mask = insert_df[field_name] == missing_id
+                    insert_df.loc[mask, field_name] = default_user_id
+                    
+        except Exception as e:
+            print(f"  Warning: Could not validate User IDs for {field_name}: {e}")
+            # If validation fails, replace all User IDs with default to be safe
+            print(f"  Replacing all {field_name} values with default User ID due to validation error")
+            insert_df.loc[non_null_mask, field_name] = default_user_id
+    
+    return insert_df
+
 def clean_lookup_references(sf, obj_name, insert_df, lookup_mappings):
     """Remove lookup field values that reference non-existent records."""
     if obj_name not in lookup_mappings:
@@ -847,6 +891,10 @@ def main():
         if default_record_ids and lookup_mappings:
             print(f"  Replacing lookup fields with default record IDs...")
             insert_df = replace_lookup_fields_with_defaults(sf, obj_name, insert_df, default_record_ids, lookup_mappings)
+
+        # Validate and replace non-existent User IDs
+        print(f"  Validating User IDs...")
+        insert_df = validate_and_replace_user_ids(sf, insert_df)
 
         # Clean lookup field references that point to non-existent records
         if lookup_mappings:
