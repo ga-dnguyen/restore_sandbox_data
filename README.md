@@ -105,7 +105,6 @@ BackupSandbox/
 ├── salesforce_exporter.py         # Export script for data backup
 ├── salesforce_importer.py         # Main import script
 ├── get_lookup_fields.py           # Lookup field analyzer
-├── replace_user_ids.py            # User ID replacement utility
 ├── default_records.json          # Default record definitions
 ├── lookup_field_mappings.json    # Lookup field mappings
 ├── exported_data/                # CSV files to import
@@ -337,7 +336,6 @@ For detailed debugging, check the console output which includes:
 | `salesforce_exporter.py`     | Exports data from source org before sandbox refresh  |
 | `salesforce_importer.py`     | Main import script with two-phase workflow           |
 | `get_lookup_fields.py`       | Analyzes Salesforce org to generate lookup mappings  |
-| `replace_user_ids.py`        | Utility to replace user IDs in exported data         |
 | `default_records.json`       | Defines default records for lookup field replacement |
 | `lookup_field_mappings.json` | Contains field metadata and relationship information |
 | `requirements.txt`           | Python package dependencies                          |
