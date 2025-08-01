@@ -921,6 +921,98 @@ def update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
                     
                     break  # Only process the first matching reference type
 
+def update_opportunity_names_after_lookup_update(sf, all_id_mappings):
+    """Update Opportunity names with original values from exported CSV data."""
+    if 'Opportunity' not in all_id_mappings:
+        print("  No Opportunity mappings found, skipping name updates.")
+        return
+    
+    print("--- Updating Opportunity Names with Original CSV Values ---")
+    
+    # Load original Opportunity CSV data
+    opportunity_csv = os.path.join("exported_data", "Opportunity.csv")
+    if not os.path.exists(opportunity_csv):
+        print("  Opportunity.csv not found, skipping name updates.")
+        return
+    
+    try:
+        original_opps = pd.read_csv(opportunity_csv)
+        if 'Id' not in original_opps.columns:
+            print("  'Id' column not found in Opportunity CSV, skipping name updates.")
+            return
+        if 'Name' not in original_opps.columns:
+            print("  'Name' column not found in Opportunity CSV, skipping name updates.")
+            return
+    except Exception as e:
+        print(f"  Error reading Opportunity CSV: {e}")
+        return
+    
+    opportunity_id_mapping = all_id_mappings['Opportunity']
+    records_to_update = []
+    
+    for _, row in original_opps.iterrows():
+        original_opp_id = row['Id']
+        original_opp_name = row.get('Name', '')
+        
+        # Skip if this opportunity wasn't successfully imported
+        if original_opp_id not in opportunity_id_mapping:
+            continue
+        
+        # Skip if no original name
+        if not original_opp_name or pd.isna(original_opp_name):
+            continue
+        
+        new_opp_id = opportunity_id_mapping[original_opp_id]
+        
+        # Add to update list - always update with original name from CSV
+        records_to_update.append({
+            'Id': new_opp_id,
+            'Name': original_opp_name
+        })
+        print(f"    Will update Opportunity {new_opp_id} with name: '{original_opp_name}'")
+    
+    # Update Opportunity names in batches
+    if records_to_update:
+        print(f"  Updating {len(records_to_update)} Opportunity names...")
+        
+        batch_size = 200
+        total_successful = 0
+        total_failed = 0
+        
+        for i in range(0, len(records_to_update), batch_size):
+            batch = records_to_update[i:i + batch_size]
+            try:
+                update_results = sf.bulk.Opportunity.update(batch)
+                successful_updates = sum(1 for result in update_results if result.get('success'))
+                failed_updates = len(batch) - successful_updates
+                total_successful += successful_updates
+                total_failed += failed_updates
+                
+                print(f"    Batch {i//batch_size + 1}: {successful_updates}/{len(batch)} names updated successfully")
+                
+                if failed_updates > 0:
+                    print(f"      {failed_updates} name updates failed")
+                    # Show details for failed updates
+                    for j, result in enumerate(update_results):
+                        if not result.get('success'):
+                            record_data = batch[j] if j < len(batch) else {}
+                            print(f"        Failed: Opportunity {record_data.get('Id', 'Unknown')} - {result.get('error', result.get('errors', 'Unknown error'))}")
+                            
+                            # Limit error display to first 3 failures
+                            if j >= 2:
+                                remaining_failures = failed_updates - 3
+                                if remaining_failures > 0:
+                                    print(f"        ... and {remaining_failures} more failed updates")
+                                break
+                                
+            except Exception as e:
+                print(f"    Batch {i//batch_size + 1} failed with exception: {e}")
+                total_failed += len(batch)
+        
+        print(f"  Opportunity name update completed: {total_successful} successful, {total_failed} failed")
+    else:
+        print("  No Opportunity names need updating.")
+
 def main():
     """Main function to handle the data import process."""
     # Set up logging first
@@ -960,6 +1052,10 @@ def main():
         
         if all_id_mappings and lookup_mappings:
             update_all_lookup_fields(sf, lookup_mappings, all_id_mappings, import_order)
+            
+            # Update Opportunity names after lookup fields are updated
+            update_opportunity_names_after_lookup_update(sf, all_id_mappings)
+            
             logger.info("Lookup field update process completed")
         else:
             logger.warning("No ID mappings or lookup field mappings found. Import data first.")
