@@ -5,8 +5,30 @@ from simple_salesforce import Salesforce
 import argparse
 import json
 import logging
+import glob
 from datetime import datetime
 from objects_config import OBJECTS_LIST
+
+# Global cache for Salesforce object descriptions to avoid repeated API calls
+_sf_describe_cache = {}
+
+def get_sobject_description(sf, object_name):
+    """Get Salesforce object description with caching to avoid repeated API calls."""
+    global _sf_describe_cache
+    
+    if object_name not in _sf_describe_cache:
+        try:
+            _sf_describe_cache[object_name] = getattr(sf, object_name).describe()
+        except Exception as e:
+            print(f"Error describing {object_name}: {e}")
+            return None
+    
+    return _sf_describe_cache[object_name]
+
+def clear_describe_cache():
+    """Clear the object description cache. Useful when connecting to a different org."""
+    global _sf_describe_cache
+    _sf_describe_cache = {}
 
 def setup_logging():
     """Set up logging to file with timestamp."""
@@ -56,26 +78,25 @@ def get_salesforce_connection():
 
 def get_lookup_relationships(sf, object_name):
     """Get all lookup relationships for an object"""
-    try:
-        sobject_desc = getattr(sf, object_name).describe()
-        lookup_fields = {}
-        
-        for field in sobject_desc['fields']:
-            if field['type'] == 'reference':
-                field_name = field['name']
-                referenced_objects = field.get('referenceTo', [])
-                if referenced_objects:  # Only include fields that reference other objects
-                    lookup_fields[field_name] = {
-                        'label': field['label'],
-                        'referenceTo': referenced_objects,
-                        'createable': field['createable'],
-                        'updateable': field['updateable']
-                    }
-        
-        return lookup_fields
-    except Exception as e:
-        print(f"Error describing {object_name}: {e}")
+    sobject_desc = get_sobject_description(sf, object_name)
+    if not sobject_desc:
         return {}
+    
+    lookup_fields = {}
+    
+    for field in sobject_desc['fields']:
+        if field['type'] == 'reference':
+            field_name = field['name']
+            referenced_objects = field.get('referenceTo', [])
+            if referenced_objects:  # Only include fields that reference other objects
+                lookup_fields[field_name] = {
+                    'label': field['label'],
+                    'referenceTo': referenced_objects,
+                    'createable': field['createable'],
+                    'updateable': field['updateable']
+                }
+    
+    return lookup_fields
 
 def generate_lookup_field_mappings(sf, objects_to_process):
     """Generate lookup field mappings for the objects being processed."""
@@ -101,30 +122,28 @@ def generate_lookup_field_mappings(sf, objects_to_process):
 
 def get_readonly_fields(sf, object_name):
     """Gets a list of read-only fields for an object that cannot be set on insert."""
-    try:
-        sobject_desc = getattr(sf, object_name).describe()
-        # Fields that are not createable or are system-generated
-        # Collect all non-createable and all formula (calculated) fields
-        readonly = {field['name'] for field in sobject_desc['fields'] if not field['createable'] or field['calculated']}
-        # For clarity, also collect all formula fields (calculated=True)
-        formula_fields = {field['name'] for field in sobject_desc['fields'] if field['calculated']}
-        # Keep 'IsPersonAccount' for logic, as it's needed to identify person accounts.
-        readonly.discard('IsPersonAccount')
-        # Add all formula fields to readonly set to ensure they are dropped
-        readonly = readonly.union(formula_fields)
-        return readonly
-    except Exception as e:
-        print(f"Could not describe object {object_name}: {e}")
+    sobject_desc = get_sobject_description(sf, object_name)
+    if not sobject_desc:
         return set()
+    
+    # Fields that are not createable or are system-generated
+    # Collect all non-createable and all formula (calculated) fields
+    readonly = {field['name'] for field in sobject_desc['fields'] if not field['createable'] or field['calculated']}
+    # For clarity, also collect all formula fields (calculated=True)
+    formula_fields = {field['name'] for field in sobject_desc['fields'] if field['calculated']}
+    # Keep 'IsPersonAccount' for logic, as it's needed to identify person accounts.
+    readonly.discard('IsPersonAccount')
+    # Add all formula fields to readonly set to ensure they are dropped
+    readonly = readonly.union(formula_fields)
+    return readonly
 
 def get_available_fields(sf, object_name):
     """Gets a set of all available fields for an object in the current org."""
-    try:
-        sobject_desc = getattr(sf, object_name).describe()
-        return {field['name'] for field in sobject_desc['fields']}
-    except Exception as e:
-        print(f"Could not describe object {object_name}: {e}")
+    sobject_desc = get_sobject_description(sf, object_name)
+    if not sobject_desc:
         return set()
+    
+    return {field['name'] for field in sobject_desc['fields']}
 
 def validate_and_replace_user_ids(sf, insert_df, default_user_id='005BL000000IBL8YAO'):
     """Validate User IDs and replace non-existent ones with default User ID."""
@@ -169,6 +188,108 @@ def validate_and_replace_user_ids(sf, insert_df, default_user_id='005BL000000IBL
             insert_df.loc[non_null_mask, field_name] = default_user_id
     
     return insert_df
+
+def read_csv_with_string_fields_preserved(sf, obj_name, csv_path):
+    """Read CSV file with text and phone fields treated as strings to prevent unwanted numeric conversion."""
+    try:
+        # First, identify text-based fields for this object
+        sobject_desc = get_sobject_description(sf, obj_name)
+        if not sobject_desc:
+            print(f"  Could not get object description for {obj_name}, falling back to normal CSV read")
+            return pd.read_csv(csv_path)
+        
+        # Get fields that should be treated as strings to prevent numeric conversion
+        string_fields = []
+        for field in sobject_desc['fields']:
+            field_type = field['type']
+            # Include phone, text, textarea, string, url, email, and picklist fields
+            if field_type in ['phone', 'string', 'textarea', 'url', 'email', 'picklist', 'multipicklist', 'combobox']:
+                string_fields.append(field['name'])
+        
+        # Create dtype dictionary to force string-based fields to be read as strings
+        dtype_dict = {field: str for field in string_fields}
+        
+        # Read CSV with string-based fields as strings
+        df = pd.read_csv(csv_path, dtype=dtype_dict)
+        
+        if string_fields:
+            print(f"  Read CSV with {len(string_fields)} text-based fields as strings to preserve formatting")
+        
+        return df
+        
+    except Exception as e:
+        print(f"  Could not read with field type detection, falling back to normal CSV read: {e}")
+        # Fallback to normal CSV reading
+        return pd.read_csv(csv_path)
+
+def fix_text_field_formatting(sf, obj_name, insert_df):
+    """Fix text and phone fields that may have been interpreted as scientific notation or unwanted float conversion."""
+    try:
+        # Get field descriptions to identify text-based fields
+        sobject_desc = get_sobject_description(sf, obj_name)
+        if not sobject_desc:
+            print(f"Error getting object description for {obj_name}")
+            return insert_df
+        
+        # Get fields that should be strings but might have been converted to numbers
+        text_based_fields = []
+        for field in sobject_desc['fields']:
+            field_type = field['type']
+            # Include phone, text, textarea, string, url, email, and picklist fields
+            if field_type in ['phone', 'string', 'textarea', 'url', 'email', 'picklist', 'multipicklist', 'combobox']:
+                text_based_fields.append(field['name'])
+        
+        modified_df = insert_df.copy()
+        
+        for field_name in text_based_fields:
+            if field_name in modified_df.columns:
+                # Convert any numeric values back to clean string format
+                def fix_text_value(value):
+                    if pd.isna(value) or value == '' or value == ' ':
+                        return value
+                    
+                    # Convert to string first
+                    str_value = str(value)
+                    
+                    # Check if it's in scientific notation (contains 'E' or 'e')
+                    if 'E' in str_value.upper():
+                        try:
+                            # Convert scientific notation to integer, then to string
+                            # This handles cases like 8.011111111E9 -> 8011111111
+                            numeric_value = float(str_value)
+                            # Only convert if it's a whole number (no decimal places after conversion)
+                            if numeric_value == int(numeric_value):
+                                return str(int(numeric_value))
+                            else:
+                                return str_value
+                        except (ValueError, OverflowError):
+                            return str_value
+                    
+                    # Check if it's a float that should be an integer (e.g., "10.0" -> "10")
+                    if '.' in str_value and str_value.replace('.', '').replace('-', '').isdigit():
+                        try:
+                            float_val = float(str_value)
+                            # If it's a whole number, convert to integer string
+                            if float_val == int(float_val):
+                                return str(int(float_val))
+                        except (ValueError, OverflowError):
+                            pass
+                    
+                    # For all other cases, ensure it's a string without .0 suffix
+                    if str_value.endswith('.0') and str_value[:-2].replace('-', '').isdigit():
+                        return str_value[:-2]
+                    
+                    return str_value
+                
+                # Apply the fix to all values in the text field
+                modified_df[field_name] = modified_df[field_name].apply(fix_text_value)
+                print(f"  Fixed text field formatting for field: {field_name}")
+        
+        return modified_df
+        
+    except Exception as e:
+        print(f"Error fixing text field formatting for {obj_name}: {e}")
+        return insert_df
 
 def clean_lookup_references(sf, obj_name, insert_df, lookup_mappings):
     """Remove lookup field values that reference non-existent records."""
@@ -789,6 +910,9 @@ def main():
     # Set up logging first
     logger = setup_logging()
     
+    # Clear any existing describe cache to ensure fresh data
+    clear_describe_cache()
+    
     sf = get_salesforce_connection()
     if not sf:
         logger.error("Failed to connect to Salesforce. Exiting.")
@@ -874,7 +998,7 @@ def main():
             print(f"CSV file not found for {obj_name}, skipping.")
             continue
         print(f"--- Processing {obj_name} --- ")
-        df = pd.read_csv(csv_path)
+        df = read_csv_with_string_fields_preserved(sf, obj_name, csv_path)
 
         if 'Id' not in df.columns:
             logger.error(f"'Id' column not found in {csv_path}, skipping.")
@@ -929,6 +1053,10 @@ def main():
         # Validate and replace non-existent User IDs
         print(f"  Validating User IDs...")
         insert_df = validate_and_replace_user_ids(sf, insert_df)
+
+        # Fix text field formatting to prevent unwanted float conversion
+        print(f"  Fixing text field formatting...")
+        insert_df = fix_text_field_formatting(sf, obj_name, insert_df)
 
         # Clean lookup field references that point to non-existent records
         if lookup_mappings:

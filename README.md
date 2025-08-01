@@ -277,6 +277,24 @@ Bulk API error: REQUEST_LIMIT_EXCEEDED
 
 **Solution**: The tool automatically falls back to single-record insert.
 
+#### 5. Phone Number Scientific Notation Issue
+
+**Problem**: Phone numbers like `08011111111` appear as `8.011111111E9` in Salesforce after import.
+
+**Root Cause**: CSV readers interpret large numbers starting with 0 as scientific notation.
+
+**Solution**: The tool automatically handles this by:
+
+- Reading all phone fields as strings during CSV import
+- Converting any scientific notation back to proper phone number format
+- Supporting all phone field types (Phone, EmployerPhone**c, MPPhoneNumber**c, etc.)
+
+**Example Fix**:
+
+- Original CSV: `08011111111`
+- Without fix: `8.011111111E9` (incorrect)
+- With fix: `08011111111` (correct)
+
 ### Performance Tips
 
 - **Use Bulk API**: Enabled by default for better performance
