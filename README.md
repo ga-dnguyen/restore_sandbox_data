@@ -12,18 +12,6 @@ This tool provides a complete sandbox data restoration workflow:
 
 **Primary Use Case**: Restore your sandbox data after a production refresh, maintaining all relationships and references.
 
-## Features
-
-- ✅ **Complete Data Restoration**: Export from source org and import to refreshed sandbox
-- ✅ **Two-Phase Import**: Eliminates complex dependency ordering
-- ✅ **ID Mapping System**: Tracks old→new ID relationships in CSV files
-- ✅ **Default Record Management**: Creates and manages default records for lookup fields
-- ✅ **Bulk API Integration**: High-performance exports and imports using Salesforce Bulk API
-- ✅ **Comprehensive Error Handling**: Detailed error reporting and fallback mechanisms
-- ✅ **Field Validation**: Automatic detection and handling of missing/invalid fields
-- ✅ **Relationship Restoration**: Accurate restoration of original data relationships
-- ✅ **Virtual Environment Support**: Isolated Python environment for dependency management
-
 ## Prerequisites
 
 ### Required Software
@@ -83,7 +71,7 @@ pip3 install -r requirements.txt
 
 ### 3. Environment Configuration
 
-Create a `.env` file in the project root:
+Base on `.env.sample`, create a `.env` file in the project root:
 
 ```bash
 SALESFORCE_USERNAME=your_username@domain.com
@@ -141,12 +129,6 @@ Define default records for lookup fields:
 }
 ```
 
-#### CSV Data Requirements
-
-- All CSV files must have an `Id` column with original Salesforce IDs
-- Place CSV files in the `exported_data/` folder
-- Supported objects: Account, Lead, Task, Opportunity, Apart**c, Room**c, Buyer**c, Transcript**c, MP_Action**c, OpportunityLog**c, ValuationLog\_\_c
-
 ## Usage
 
 ### Complete Sandbox Restoration Workflow
@@ -199,7 +181,7 @@ Grant the following permission to the user profile used for data import:
 4. Enable "View and Edit Converted Leads" permission
 5. Save the profile changes
 
-### Step 2: Analyze Lookup Fields (Optional)
+### Step 2: Analyze Lookup Fields (if there is change in lookup fields)
 
 Generate lookup field mappings for your refreshed org:
 
@@ -243,40 +225,6 @@ python3 salesforce_importer.py --update-lookups
 - Updates all lookup fields with correct relationships
 - Provides detailed error reporting for failed updates
 
-## Advanced Usage
-
-### Import Order
-
-Objects are imported in dependency order:
-
-1. Account
-2. Lead
-3. Task
-4. Opportunity
-5. Apart\_\_c
-6. Room\_\_c
-7. Buyer\_\_c
-8. Transcript\_\_c
-9. MP_Action\_\_c
-10. OpportunityLog\_\_c
-11. ValuationLog\_\_c
-
-### Error Handling
-
-The tool provides comprehensive error handling:
-
-- **Field Validation**: Automatically removes non-existent fields
-- **Bulk API Fallback**: Falls back to single-record insert if bulk fails
-- **Detailed Error Reports**: Shows specific field errors and record context
-- **Partial Success**: Continues processing even if some records fail
-
-### ID Mapping System
-
-- **Automatic Generation**: Creates `id_mapping_ObjectName.csv` files
-- **Format**: Two columns (`Id`, `NewId`) mapping old→new IDs
-- **Persistent Storage**: Saved in `mapping_data/` folder
-- **Reusable**: Can be used across multiple import sessions
-
 ## Troubleshooting
 
 ### Common Issues
@@ -313,15 +261,6 @@ Bulk API error: REQUEST_LIMIT_EXCEEDED
 
 **Solution**: The tool automatically falls back to single-record insert.
 
-### Debug Mode
-
-For detailed debugging, check the console output which includes:
-
-- Field validation results
-- Bulk operation status
-- Individual record error details
-- ID mapping statistics
-
 ### Performance Tips
 
 - **Use Bulk API**: Enabled by default for better performance
@@ -341,73 +280,3 @@ For detailed debugging, check the console output which includes:
 | `requirements.txt`           | Python package dependencies                          |
 | `exported_data/*.csv`        | Source data files to import                          |
 | `mapping_data/*.csv`         | Generated ID mappings (old→new)                      |
-
-## Example Workflow
-
-### Complete Sandbox Restoration Process
-
-```bash
-# 1. Set up project
-cd /path/to/BackupSandbox
-python3 -m venv venv
-source venv/bin/activate  # On macOS/Linux
-pip3 install -r requirements.txt
-
-# 2. Set up environment
-echo "SALESFORCE_USERNAME=user@company.com" > .env
-echo "SALESFORCE_PASSWORD=password123token" >> .env
-echo "SALESFORCE_CONSUMER_KEY=your_key" >> .env
-echo "SALESFORCE_CONSUMER_SECRET=your_secret" >> .env
-
-# 3. BEFORE sandbox refresh: Export your data
-python3 salesforce_exporter.py
-
-# 4. Refresh your sandbox (via Salesforce Setup)
-
-# 5. AFTER refresh: Update .env with new sandbox credentials
-
-# 6. Prepare Salesforce org (IMPORTANT!)
-# - Deactivate flows: MP_001_Send Action Notification Slack and MP_009_KNBのMPアクション作成時、活動登録をする
-# - Grant "View and Edit Converted Leads" permission to import user profile
-
-# 7. Analyze your refreshed org (optional)
-python3 get_lookup_fields.py
-
-# 8. Restore all data
-python3 salesforce_importer.py
-
-# 9. Restore relationships
-python3 salesforce_importer.py --update-lookups
-
-# 10. Verify results in Salesforce org
-```
-
-### Daily/Weekly Backup Workflow
-
-```bash
-# Activate environment
-source venv/bin/activate
-
-# Export current data as backup
-python3 salesforce_exporter.py
-
-# Store exported_data/ folder in version control or backup location
-```
-
-## Support
-
-For issues and questions:
-
-1. Check the console output for detailed error messages
-2. Verify your CSV data format and field names
-3. Ensure proper Salesforce permissions
-4. Review the generated mapping files for data integrity
-
-## Contributing
-
-When modifying the code:
-
-- Maintain the two-phase import pattern
-- Update error handling for new scenarios
-- Test with various data volumes
-- Document any new configuration options
