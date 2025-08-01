@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from dotenv import load_dotenv
 from simple_salesforce import Salesforce
+from objects_config import OBJECTS_LIST
 
 def main():
     """
@@ -17,20 +18,8 @@ def main():
     sf_consumer_secret = os.getenv("SALESFORCE_CONSUMER_SECRET")
     sf_domain = os.getenv("SALESFORCE_DOMAIN", "login")
 
-    # List of objects to query
-    objects_to_query = [
-        'Lead',
-        'Task',
-        'Opportunity',
-        'Account',
-        'MP_Action__c',
-        'OpportunityLog__c',
-        'ValuationLog__c',
-        'Apart__c',
-        'Room__c',
-        'Buyer__c',
-        'Transcript__c'
-    ]
+    # Get objects to export from configuration
+    objects_to_query = OBJECTS_LIST
 
     # Ensure the exported_data directory exists
     data_dir = "exported_data"

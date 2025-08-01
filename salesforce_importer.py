@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 from datetime import datetime
+from objects_config import OBJECTS_LIST
 
 def setup_logging():
     """Set up logging to file with timestamp."""
@@ -52,6 +53,51 @@ def get_salesforce_connection():
         domain=sf_domain
     )
     return sf
+
+def get_lookup_relationships(sf, object_name):
+    """Get all lookup relationships for an object"""
+    try:
+        sobject_desc = getattr(sf, object_name).describe()
+        lookup_fields = {}
+        
+        for field in sobject_desc['fields']:
+            if field['type'] == 'reference':
+                field_name = field['name']
+                referenced_objects = field.get('referenceTo', [])
+                if referenced_objects:  # Only include fields that reference other objects
+                    lookup_fields[field_name] = {
+                        'label': field['label'],
+                        'referenceTo': referenced_objects,
+                        'createable': field['createable'],
+                        'updateable': field['updateable']
+                    }
+        
+        return lookup_fields
+    except Exception as e:
+        print(f"Error describing {object_name}: {e}")
+        return {}
+
+def generate_lookup_field_mappings(sf, objects_to_process):
+    """Generate lookup field mappings for the objects being processed."""
+    print("--- Generating Lookup Field Mappings ---")
+    all_lookup_mappings = {}
+    
+    for obj_name in objects_to_process:
+        print(f"  Analyzing {obj_name}...")
+        lookup_fields = get_lookup_relationships(sf, obj_name)
+        
+        if lookup_fields:
+            all_lookup_mappings[obj_name] = lookup_fields
+            print(f"    Found {len(lookup_fields)} lookup fields")
+        else:
+            print(f"    No lookup fields found")
+    
+    # Save to JSON file for reference
+    with open('lookup_field_mappings.json', 'w') as f:
+        json.dump(all_lookup_mappings, f, indent=2)
+    
+    print(f"  Saved lookup field mappings to lookup_field_mappings.json")
+    return all_lookup_mappings
 
 def get_readonly_fields(sf, object_name):
     """Gets a list of read-only fields for an object that cannot be set on insert."""
@@ -752,21 +798,8 @@ def main():
     logger.info("Successfully connected to Salesforce for import.")
     print("Successfully connected to Salesforce for import.")
 
-    # --- Define Import Order (Parent objects first) ---
-    # This order is critical. Adjust if you have different dependencies.
-    import_order = [
-        'Account',
-        'Lead',
-        'Task',
-        'Opportunity',
-        'Apart__c',
-        'Room__c',
-        'Buyer__c',
-        'Transcript__c',
-        'MP_Action__c',
-        'OpportunityLog__c',
-        'ValuationLog__c'
-    ]
+    # --- Define Import Order (from configuration) ---
+    import_order = OBJECTS_LIST
 
     parser = argparse.ArgumentParser(description='Import Salesforce data from CSV files.')
     parser.add_argument('--object', type=str, help='The specific Salesforce object to import (e.g., Account). If not provided, all objects will be imported.')
@@ -776,8 +809,9 @@ def main():
     # If --update-lookups flag is provided, only run the lookup update process
     if args.update_lookups:
         logger.info("Starting lookup field update process")
-        # Load lookup field mappings for replacement
-        lookup_mappings = load_lookup_field_mappings()
+        # Generate lookup field mappings for current org (always get fresh data)
+        logger.info("Generating lookup field mappings from current org")
+        lookup_mappings = generate_lookup_field_mappings(sf, import_order)
         
         # Load existing ID mappings from previous imports
         logger.info("Loading existing ID mappings")
@@ -800,9 +834,9 @@ def main():
         logger.info("Creating default records in Salesforce")
         default_record_ids = create_default_records(sf, default_records)
 
-    # Load lookup field mappings for replacement
-    logger.info("Loading lookup field mappings")
-    lookup_mappings = load_lookup_field_mappings()
+    # Generate lookup field mappings for current org (always get fresh data)
+    logger.info("Generating lookup field mappings from current org")
+    lookup_mappings = generate_lookup_field_mappings(sf, import_order)
     
     # Load existing ID mappings from previous imports
     logger.info("Loading existing ID mappings")

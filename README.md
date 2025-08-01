@@ -1,6 +1,9 @@
 # Salesforce Sandbox Data Restoration Tool
 
-A comprehensive Python tool for backing up and restoring Salesforce data after sandbox refreshes. This tool handles the complete workflow from data export to import with advanced relationship handling and ID mapping capabilities.
+A comprehensive Python tool for backing up and restoring Salesforce data after sandbox refreshes. This tool handles the complete workflow from data export to import with advanced relationship handling and ID mapping capab| `salesforce_exporter.py` | Exports data from source org before sandbox refresh |
+| `salesforce_importer.py` | Main import script with automatic lookup field analysis |
+| `objects_config.py` | Shared configuration defining objects to process |
+| `default_records.json` | Defines default records for lookup field replacement |ties.
 
 ## Overview
 
@@ -91,8 +94,8 @@ BackupSandbox/
 ├── venv/                          # Python virtual environment (created by you)
 ├── requirements.txt               # Python dependencies
 ├── salesforce_exporter.py         # Export script for data backup
-├── salesforce_importer.py         # Main import script
-├── get_lookup_fields.py           # Lookup field analyzer
+├── salesforce_importer.py         # Main import script with lookup field analysis
+├── objects_config.py              # Shared object configuration
 ├── default_records.json          # Default record definitions
 ├── lookup_field_mappings.json    # Lookup field mappings
 ├── exported_data/                # CSV files to import
@@ -109,6 +112,28 @@ BackupSandbox/
 ```
 
 ### 5. Configuration Files
+
+#### objects_config.py
+
+Defines the objects to be exported and imported:
+
+```python
+OBJECTS_LIST = [
+    'Account',      # Parent object - must come first
+    'Lead',         # Independent object
+    'Task',         # Can reference Account, Lead, Opportunity
+    'Opportunity',  # References Account
+    'Apart__c',     # Custom object
+    'Room__c',      # References Apart__c
+    'Buyer__c',     # Custom object
+    'Transcript__c', # Custom object
+    'MP_Action__c', # Custom object - references Lead, Opportunity
+    'OpportunityLog__c', # Custom object - references Opportunity
+    'ValuationLog__c'    # Custom object - references Opportunity
+]
+```
+
+To add or remove objects, simply modify this list. Order matters for import due to lookup relationships.
 
 #### default_records.json
 
@@ -181,22 +206,12 @@ Grant the following permission to the user profile used for data import:
 4. Enable "View and Edit Converted Leads" permission
 5. Save the profile changes
 
-### Step 2: Analyze Lookup Fields (if there is change in lookup fields)
-
-Generate lookup field mappings for your refreshed org:
-
-```bash
-python3 get_lookup_fields.py
-```
-
-This creates `lookup_field_mappings.json` with field metadata.
-
-### Step 3: Import Data (Phase 1)
+### Step 2: Import Data (Phase 1)
 
 Import all records with default lookup values:
 
 ```bash
-# Import all objects
+# Import all objects (automatically analyzes lookup fields)
 python3 salesforce_importer.py
 
 # Import specific object
@@ -205,12 +220,13 @@ python3 salesforce_importer.py --object Account
 
 **What happens:**
 
+- Automatically analyzes current org to generate lookup field mappings
 - Creates default records in Salesforce
 - Imports all CSV data with lookup fields pointing to defaults
 - Generates ID mapping files in `mapping_data/` folder
 - Shows detailed progress and error information
 
-### Step 4: Update Relationships (Phase 2)
+### Step 3: Update Relationships (Phase 2)
 
 Restore original relationships using ID mappings:
 
@@ -270,13 +286,12 @@ Bulk API error: REQUEST_LIMIT_EXCEEDED
 
 ## File Descriptions
 
-| File                         | Purpose                                              |
-| ---------------------------- | ---------------------------------------------------- |
-| `salesforce_exporter.py`     | Exports data from source org before sandbox refresh  |
-| `salesforce_importer.py`     | Main import script with two-phase workflow           |
-| `get_lookup_fields.py`       | Analyzes Salesforce org to generate lookup mappings  |
-| `default_records.json`       | Defines default records for lookup field replacement |
-| `lookup_field_mappings.json` | Contains field metadata and relationship information |
-| `requirements.txt`           | Python package dependencies                          |
-| `exported_data/*.csv`        | Source data files to import                          |
-| `mapping_data/*.csv`         | Generated ID mappings (old→new)                      |
+| File                         | Purpose                                                 |
+| ---------------------------- | ------------------------------------------------------- |
+| `salesforce_exporter.py`     | Exports data from source org before sandbox refresh     |
+| `salesforce_importer.py`     | Main import script with automatic lookup field analysis |
+| `default_records.json`       | Defines default records for lookup field replacement    |
+| `lookup_field_mappings.json` | Contains field metadata and relationship information    |
+| `requirements.txt`           | Python package dependencies                             |
+| `exported_data/*.csv`        | Source data files to import                             |
+| `mapping_data/*.csv`         | Generated ID mappings (old→new)                         |
