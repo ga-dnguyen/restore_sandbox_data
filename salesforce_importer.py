@@ -145,9 +145,25 @@ def get_available_fields(sf, object_name):
     
     return {field['name'] for field in sobject_desc['fields']}
 
-def validate_and_replace_user_ids(sf, insert_df, default_user_id='005BL000000IBL8YAO'):
+def validate_and_replace_user_ids(sf, obj_name, insert_df, default_user_id='005BL000000IBL8YAO'):
     """Validate User IDs and replace non-existent ones with default User ID."""
-    user_fields = ['CreatedById', 'LastModifiedById', 'OwnerId']
+    # Get object description to find all user lookup fields
+    sobject_desc = get_sobject_description(sf, obj_name)
+    if not sobject_desc:
+        print(f"  Warning: Could not get object description for {obj_name}, skipping User ID validation")
+        return insert_df
+    
+    # Find all fields that reference the User object
+    user_fields = []
+    for field in sobject_desc['fields']:
+        if field['type'] == 'reference' and 'User' in field.get('referenceTo', []):
+            user_fields.append(field['name'])
+    
+    if not user_fields:
+        print(f"  No User lookup fields found for {obj_name}")
+        return insert_df
+    
+    print(f"  Found {len(user_fields)} User lookup fields: {', '.join(user_fields)}")
     
     for field_name in user_fields:
         if field_name not in insert_df.columns:
@@ -1052,7 +1068,7 @@ def main():
 
         # Validate and replace non-existent User IDs
         print(f"  Validating User IDs...")
-        insert_df = validate_and_replace_user_ids(sf, insert_df)
+        insert_df = validate_and_replace_user_ids(sf, obj_name, insert_df)
 
         # Fix text field formatting to prevent unwanted float conversion
         print(f"  Fixing text field formatting...")
